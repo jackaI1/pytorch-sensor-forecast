@@ -16,6 +16,41 @@ uv run sensor-forecast run
 
 The download is public weather data, with no account needed. The run uses the CPU and saves its results in `outputs/benchmark/`. I also keep a [completed run](results/weather-2014/summary.md) in the repository, so the results are readable without installing anything.
 
+## Text experiments
+
+I also wanted to learn how small language models train and how a model can answer requests after training. These experiments use public text rather than the weather readings, so they do not change the temperature forecasts.
+
+The first model learns to predict the next character in Shakespeare. It divides each batch among CPU devices, combines their updates, and checks its predictions on text held back from training. Perplexity is a measure of how uncertain the model is about the next character; lower is better. The second model learns whether an IMDB movie review is positive or negative. TensorFlow Serving runs the saved model as a small web service, and a client sends batches of token numbers to it.
+
+```sh
+python3 -m venv .text-env
+source .text-env/bin/activate
+pip install -r text_models/requirements-jax.txt
+XLA_FLAGS=--xla_force_host_platform_device_count=4 python -m text_models.jax_lm --steps 200
+XLA_FLAGS=--xla_force_host_platform_device_count=4 python -m text_models.jax_lm --steps 100 --resume
+```
+
+The first command downloads [Tiny Shakespeare](https://github.com/karpathy/char-rnn/tree/master/data/tinyshakespeare) and saves a checkpoint under `outputs/`. The second continues from the saved weights and random state. Only load checkpoints you trust. The script prints held-out loss and perplexity; the last 10% of the text is held out in order.
+
+For the review model, use a separate environment with `pip install -r text_models/requirements-tf.txt`, then run:
+
+```sh
+python -m text_models.tf_classifier --limit 10000 --epochs 3
+docker compose -f text_models/compose.yaml up -d
+python -m text_models.serving_client --batch 32
+docker compose -f text_models/compose.yaml down
+```
+
+The training command downloads the public [IMDB sentiment dataset](https://ai.stanford.edu/~amaas/data/sentiment/) through Keras and prints accuracy on its separate test set. The client reports mean and 95th percentile request time after a warm-up. It sends a zero-filled batch as a repeatable timing example; real reviews must first be converted to the same IMDB vocabulary and padded to 128 tokens. Docker packages the serving process so the saved model can be called over HTTP. The service is intended for local use, with no authentication configured.
+
+| Check | Measurement | Interpretation |
+|---|---:|---|
+| Distributed language model | 4 simulated CPU devices | Test compares loss and every gradient with one-device computation |
+| Review service | 16 reviews per request | CI compares REST predictions with the original trained model |
+| Weather benchmark | 1.36°C at 1 hour | Tree model mean absolute error on the held-out weather period |
+
+These are small learning experiments, not production language models. Their scores depend on training length and hardware; CI prints its actual held-out scores and request timing rather than treating a short smoke run as a benchmark. More details are in [the text experiment notes](docs/text-models.md).
+
 ## What I found
 
 MAE means mean absolute error: how far the forecast was from the actual temperature on average, ignoring the direction of the mistake. Lower is better. Parentheses show a 95% bootstrap interval, estimated by repeatedly resampling groups of consecutive test days.

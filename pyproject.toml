@@ -23,6 +23,7 @@ sensor-forecast = "sensor_forecast.cli:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+norecursedirs = ["text_models"]
 
 [tool.ruff]
 line-length = 100
