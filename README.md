@@ -43,10 +43,14 @@ docker compose -f text_models/compose.yaml down
 
 The training command downloads the public [IMDB sentiment dataset](https://ai.stanford.edu/~amaas/data/sentiment/) through Keras and prints accuracy on its separate test set. The client reports mean and 95th percentile request time after a warm-up. It sends a zero-filled batch as a repeatable timing example; real reviews must first be converted to the same IMDB vocabulary and padded to 128 tokens. Docker packages the serving process so the saved model can be called over HTTP. The service is intended for local use, with no authentication configured.
 
-| Check | Measurement | Interpretation |
+The following are short CI smoke runs, not scores from the longer commands above. The language model used three updates, including a resume; the review model trained on 256 reviews for one epoch and was evaluated on 256 separate reviews. Latency includes HTTP on one GitHub-hosted CPU runner and varies by machine.
+
+| Check | Result | Interpretation |
 |---|---:|---|
-| Distributed language model | 4 simulated CPU devices | Test compares loss and every gradient with one-device computation |
-| Review service | 16 reviews per request | CI compares REST predictions with the original trained model |
+| Language model held-out perplexity | 44.12 | Four simulated CPU devices; lower is better |
+| Review model held-out accuracy | 54.7% | 256 test reviews, after one short training epoch |
+| Review service prediction difference | 0.00000006 maximum | 16 served predictions compared with the original model |
+| Review service request time | 1.97 ms mean, 2.10 ms p95 | 20 requests of 16 reviews after warm-up |
 | Weather benchmark | 1.36°C at 1 hour | Tree model mean absolute error on the held-out weather period |
 
 These are small learning experiments, not production language models. Their scores depend on training length and hardware; CI prints its actual held-out scores and request timing rather than treating a short smoke run as a benchmark. More details are in [the text experiment notes](docs/text-models.md).
