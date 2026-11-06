@@ -36,5 +36,7 @@ jobs:
       - run: python -m text_models.serving_check prepare
       - run: docker compose -f text_models/compose.yaml up -d
       - run: python -m text_models.serving_check check
+      - if: failure()
+        run: docker compose -f text_models/compose.yaml logs --tail=100
       - if: always()
         run: docker compose -f text_models/compose.yaml down

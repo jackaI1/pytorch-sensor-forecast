@@ -3,6 +3,7 @@
 import argparse
 import time
 from pathlib import Path
+from urllib.error import HTTPError
 
 import numpy as np
 import tensorflow as tf
@@ -29,6 +30,10 @@ else:
         try:
             actual = serving_client.predict(url, data["x"])
             break
+        except HTTPError as exc:
+            if exc.code != 503:
+                raise RuntimeError(exc.read().decode()) from exc
+            time.sleep(1)
         except OSError:
             time.sleep(1)
     else:
