@@ -1,0 +1,9 @@
+services:
+  serving:
+    image: tensorflow/serving:2.16.1
+    ports:
+      - "8501:8501"
+    environment:
+      MODEL_NAME: review
+    volumes:
+      - ../outputs/review_model:/models/review:ro

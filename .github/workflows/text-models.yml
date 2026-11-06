@@ -1,0 +1,42 @@
+name: text models
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  jax:
+    runs-on: ubuntu-latest
+    env:
+      XLA_FLAGS: --xla_force_host_platform_device_count=4
+      OMP_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r text_models/requirements-jax.txt
+      - run: python -m pytest text_models/tests/test_jax.py -q
+      - run: python -m text_models.jax_lm --steps 2 --batch-size 8
+      - run: python -m text_models.jax_lm --steps 1 --batch-size 8 --resume
+  tensorflow-serving:
+    runs-on: ubuntu-latest
+    env:
+      TF_NUM_INTRAOP_THREADS: '1'
+      TF_NUM_INTEROP_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r text_models/requirements-tf.txt
+      - run: python -m pytest text_models/tests/test_tf.py -q
+      - run: python -m text_models.serving_check prepare
+      - run: docker compose -f text_models/compose.yaml up -d
+      - run: python -m text_models.serving_check check
+      - if: failure()
+        run: docker compose -f text_models/compose.yaml logs --tail=100
+      - if: always()
+        run: docker compose -f text_models/compose.yaml down
