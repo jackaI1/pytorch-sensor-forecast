@@ -1,0 +1,35 @@
+name: tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.11', '3.12']
+    env:
+      OMP_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --locked --extra dev --python ${{ matrix.python }}
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest -q
+      - name: Run real models through the CLI on a bundled public weather excerpt
+        run: >-
+          uv run sensor-forecast run --data tests/fixtures/weather.csv
+          --output outputs/ci --train-hours 120 --test-hours 48 --folds 2
+          --epochs 2 --block-size 2 --resamples 100
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forecast-report-${{ matrix.python }}
+          path: outputs/ci/
