@@ -38,14 +38,14 @@ def data(limit):
 
 
 def export(model, path):
-    class Serving(tf.Module):
-        @tf.function(input_signature=[tf.TensorSpec([None, LENGTH], tf.int32, name="tokens")])
-        def serve(self, tokens):
-            return {"probability": model(tokens, training=False)}
-
-    module = Serving()
-    module.model = model
-    tf.saved_model.save(module, str(path), signatures={"serving_default": module.serve})
+    archive = tf.keras.export.ExportArchive()
+    archive.track(model)
+    archive.add_endpoint(
+        name="serving_default",
+        fn=lambda tokens: {"probability": model(tokens, training=False)},
+        input_signature=[tf.TensorSpec([None, LENGTH], tf.int32, name="tokens")],
+    )
+    archive.write_out(str(path))
 
 
 def main():
