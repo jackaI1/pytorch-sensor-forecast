@@ -1,14 +1,24 @@
-I built an hourly temperature forecast comparison because I wanted to know whether a trained model could beat simply reusing yesterday's readings.
+I merged this into my existing [lifeos-open project](https://github.com/jackaI1/lifeos-open/tree/main/projects/pytorch-sensor-forecast). The current code is in `projects/pytorch-sensor-forecast/` there. I kept the code here so older links still work.
 
-I give three approaches the same past weather measurements and compare their forecasts with what actually happened 1, 6 and 24 hours later. I move the test period forward each week so that none of the models can learn from the future. The output is a table of errors, an estimate of how uncertain those averages are, and every individual forecast so I can check the numbers myself.
+The move keeps the original layout, including `text_models/serving_check.py`, `text_models/jax_lm.py`, `text_models/__init__.py`, `text_models/serving_client.py`. I replaced the README with the report below and left out Git history, installed dependencies, caches and generated build output from the hub copy.
 
-On 56 daily forecast times in November and December 2014, the tree model reduced the 1-hour average error from **2.66°C to 1.36°C**. Yesterday's readings still did best at 24 hours. My small neural network struggled at 6 hours, so I would choose the tree model for short forecasts in this comparison. These results describe one station and one test period.
+The project checks are configured in the hub at `.github/workflows/pytorch-sensor-forecast-text-models.yml`, `.github/workflows/pytorch-sensor-forecast-ci.yml`, with commands run from this project folder and changes filtered to its paths.
+
+---
+
+# pytorch-sensor-forecast
+
+I built an hourly temperature forecast comparison to learn how the underlying idea works. This is a learning project.
+
+I use public UCI Beijing weather measurements and public Tiny Shakespeare and IMDB text; attribution is kept in `docs/methods.md` and `docs/text-models.md`.
+
+## Try it
+
+From this project directory:
 
 To run it, install [uv](https://docs.astral.sh/uv/getting-started/installation/), a Python environment manager, then:
 
 ```sh
-git clone https://github.com/jackaI1/pytorch-sensor-forecast.git
-cd pytorch-sensor-forecast
 uv sync --locked --extra dev --python 3.11
 uv run sensor-forecast fetch
 uv run sensor-forecast run
@@ -16,19 +26,12 @@ uv run sensor-forecast run
 
 The download is public weather data, with no account needed. The run uses the CPU and saves its results in `outputs/benchmark/`. I also keep a [completed run](results/weather-2014/summary.md) in the repository, so the results are readable without installing anything.
 
+
 ## Text experiments
 
 I also wanted to learn how small language models train and how a model can answer requests after training. These experiments use public text rather than the weather readings, so they do not change the temperature forecasts.
 
 The first model learns to predict the next character in Shakespeare. It divides each batch among CPU devices, combines their updates, and checks its predictions on text held back from training. Perplexity is a measure of how uncertain the model is about the next character; lower is better. The second model learns whether an IMDB movie review is positive or negative. TensorFlow Serving runs the saved model as a small web service, and a client sends batches of token numbers to it.
-
-```sh
-python3 -m venv .text-env
-source .text-env/bin/activate
-pip install -r text_models/requirements-jax.txt
-XLA_FLAGS=--xla_force_host_platform_device_count=4 python -m text_models.jax_lm --steps 200
-XLA_FLAGS=--xla_force_host_platform_device_count=4 python -m text_models.jax_lm --steps 100 --resume
-```
 
 The first command downloads [Tiny Shakespeare](https://github.com/karpathy/char-rnn/tree/master/data/tinyshakespeare) and saves a checkpoint under `outputs/`. The second continues from the saved weights and random state. Only load checkpoints you trust. The script prints held-out loss and perplexity; the last 10% of the text is held out in order.
 
@@ -42,16 +45,6 @@ docker compose -f text_models/compose.yaml down
 ```
 
 The training command downloads the public [IMDB sentiment dataset](https://ai.stanford.edu/~amaas/data/sentiment/) through Keras and prints accuracy on its separate test set. The client reports mean and 95th percentile request time after a warm-up. It sends a zero-filled batch as a repeatable timing example; real reviews must first be converted to the same IMDB vocabulary and padded to 128 tokens. Docker packages the serving process so the saved model can be called over HTTP. The service is intended for local use, with no authentication configured.
-
-The following are short CI smoke runs, not scores from the longer commands above. The language model used three updates, including a resume; the review model trained on 256 reviews for one epoch and was evaluated on 256 separate reviews. Latency includes HTTP on one GitHub-hosted CPU runner and varies by machine.
-
-| Check | Result | Interpretation |
-|---|---:|---|
-| Language model held-out perplexity | 44.12 | Four simulated CPU devices; lower is better |
-| Review model held-out accuracy | 54.7% | 256 test reviews, after one short training epoch |
-| Review service prediction difference | 0.00000006 maximum | 16 served predictions compared with the original model |
-| Review service request time | 1.97 ms mean, 2.10 ms p95 | 20 requests of 16 reviews after warm-up |
-| Weather benchmark | 1.36°C at 1 hour | Tree model mean absolute error on the held-out weather period |
 
 These are small learning experiments, not production language models. Their scores depend on training length and hardware; CI prints its actual held-out scores and request timing rather than treating a short smoke run as a benchmark. More details are in [the text experiment notes](docs/text-models.md).
 
@@ -110,16 +103,9 @@ Rolling-origin validation means training on the past, testing on the next block 
 
 I exclude training examples if any of their targets reach the test period. The LSTM's mean and standard deviation come only from that fold's training observations. A test changes all future readings and checks that the first prediction from every model stays exactly the same. I use a seven-day moving-block bootstrap with 2,000 resamples to retain some day-to-day dependence in the uncertainty estimates. [The detailed methods](docs/methods.md) spell out the index boundaries, model settings and interval calculation.
 
-## Code and checks
+## Tests and limits
 
-The package is in `src/sensor_forecast/`: `data.py` validates and downloads observations, `splits.py` builds past-only inputs, `models.py` fits the two learned models, `metrics.py` calculates error intervals, and `benchmark.py` writes the comparison and fold audit. `cli.py` connects these pieces to the commands above.
+I kept 8 files of test code and supporting test helpers in this copy. This is a file inventory, not an execution result. This is a source snapshot, and running it on a new machine may need environment-specific setup.
 
-```sh
-uv run pytest -q
-uv run ruff check .
-uv run ruff format --check .
-```
 
-All **52 tests** pass locally. They cover future-data leakage, training cutoffs, deterministic seeding, actual learning, seasonal indexing, invalid inputs, hand-calculated errors, block-bootstrap sampling, report files and CLI failures. There were no existing tests before this project. GitHub Actions runs the suite on Python 3.11 and 3.12, then fits all three models through the CLI on the bundled public excerpt and uploads the resulting reports. CI does not depend on UCI being online.
-
-I pin dependencies in `uv.lock` and record the actual versions in each report. The committed full run used Python 3.11.16, PyTorch 2.15.0 and scikit-learn 1.9.1 on CPU, with seed 42. Repeating the run in the same environment is deterministic; numerical details can differ across platforms. The code is MIT licensed; the attributed public observations retain their CC BY 4.0 license.
+Project checks run from this directory through the path-filtered hub workflows: `pytorch-sensor-forecast-text-models.yml`, `pytorch-sensor-forecast-ci.yml`.
