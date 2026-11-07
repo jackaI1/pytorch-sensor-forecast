@@ -33,6 +33,14 @@ I also wanted to learn how small language models train and how a model can answe
 
 The first model learns to predict the next character in Shakespeare. It divides each batch among CPU devices, combines their updates, and checks its predictions on text held back from training. Perplexity is a measure of how uncertain the model is about the next character; lower is better. The second model learns whether an IMDB movie review is positive or negative. TensorFlow Serving runs the saved model as a small web service, and a client sends batches of token numbers to it.
 
+```sh
+python3 -m venv .text-env
+source .text-env/bin/activate
+pip install -r text_models/requirements-jax.txt
+XLA_FLAGS=--xla_force_host_platform_device_count=4 python -m text_models.jax_lm --steps 200
+XLA_FLAGS=--xla_force_host_platform_device_count=4 python -m text_models.jax_lm --steps 100 --resume
+```
+
 The first command downloads [Tiny Shakespeare](https://github.com/karpathy/char-rnn/tree/master/data/tinyshakespeare) and saves a checkpoint under `outputs/`. The second continues from the saved weights and random state. Only load checkpoints you trust. The script prints held-out loss and perplexity; the last 10% of the text is held out in order.
 
 For the review model, use a separate environment with `pip install -r text_models/requirements-tf.txt`, then run:
@@ -48,7 +56,9 @@ The training command downloads the public [IMDB sentiment dataset](https://ai.st
 
 These are small learning experiments, not production language models. Their scores depend on training length and hardware; CI prints its actual held-out scores and request timing rather than treating a short smoke run as a benchmark. More details are in [the text experiment notes](docs/text-models.md).
 
-## What I found
+## Recorded comparison
+
+The checked-in reference run in `results/weather-2014/` reports the numbers below. I did not repeat that full training run during this move.
 
 MAE means mean absolute error: how far the forecast was from the actual temperature on average, ignoring the direction of the mistake. Lower is better. Parentheses show a 95% bootstrap interval, estimated by repeatedly resampling groups of consecutive test days.
 
